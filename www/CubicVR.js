@@ -5823,9 +5823,9 @@ cubicvr_particleEmitter = function(params)
 
 cubicvr_particleEmitter.prototype.createParticle = function(time)
 {
-  var pos = [ this.position[2] + (Math.random()-0.5)*this.p_position_variance[2]*2,
+  var pos = [ this.position[0] + (Math.random()-0.5)*this.p_position_variance[0]*2,
               this.position[1] + (Math.random()-0.5)*this.p_position_variance[1]*2,
-              this.position[0] + (Math.random()-0.5)*this.p_position_variance[0]*2
+              this.position[2] + (Math.random()-0.5)*this.p_position_variance[2]*2
                 ];
   var start = time;
   var life = this.p_life + this.p_life_variance*Math.random();
