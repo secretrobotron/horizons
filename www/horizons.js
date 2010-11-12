@@ -39,6 +39,7 @@ var test_box;
 var test_light;
 var test_particle_system;
 var test_emitter;
+var test_body;
 var xp = 0;
 
 /**********************************************************
@@ -416,9 +417,28 @@ function init_physics() {
   world_aabb.minVertex.Set(-1000, -1000);
   world_aabb.maxVertex.Set(1000, 1000);
 
-  var gravity = new b2Vec2(0, 300);
+  var gravity = new b2Vec2(0, -3.0);
   var rest_sleep = true;
   physics_world = new b2World(world_aabb, gravity, rest_sleep);
+
+  var sd = new b2BoxDef();
+	var bd = new b2BodyDef();
+	bd.AddShape(sd);
+	sd.density = 1.0;
+	sd.friction = 0.5;
+  sd.radius = 1.0;
+	sd.extents.Set(1, 1);
+
+  bd.position.Set(0, 1);
+	test_body = physics_world.CreateBody(bd);
+
+  var groundSd = new b2BoxDef();
+	groundSd.extents.Set(1000, 1);
+	groundSd.restitution = 0.2;
+	var groundBd = new b2BodyDef();
+	groundBd.AddShape(groundSd);
+	groundBd.position.Set(-500, -2);
+	physics_world.CreateBody(groundBd)
 
 } //init_physics
 
@@ -452,6 +472,7 @@ function main_loop() {
   var time_step = 1.0/60;
   var iteration = 1;
   physics_world.Step(time_step, iteration);
+  test_box.position = [test_body.GetOriginPosition().x, test_body.GetOriginPosition().y, 10];
   /*** end physics ***/
 
   /** begin render **/
