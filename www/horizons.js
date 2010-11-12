@@ -10,7 +10,7 @@ var SPF = 1000/FPS;
 var main_canvas;
 var main_canvas_ctx;
 var gl;
-var render_loop_interval = 0;
+var main_loop_interval = 0;
 
 /*** stats ***/
 var stats_div = null;
@@ -29,11 +29,28 @@ var timerSeconds = 0;
 var timerLastSeconds = 0;
 var frameCounter = 0;
 
+/*** game object ***/
+
+/*** physics ***/
+var physics_world;
+
+/*** testing ***/
+var test_box;
+var test_light;
+var test_particle_system;
+var test_emitter;
+var xp = 0;
+
 /**********************************************************
  * INIT
  **********************************************************/
 
-/*** init gl ***/
+/**
+ * init_gl
+ * Initialize gl & cubicvr
+ *
+ * @canvas: canvas to initialize for 3d
+ **/
 function init_gl(canvas) {
   gl = null;
   try {
@@ -57,15 +74,19 @@ function init_gl(canvas) {
   gl.depthFunc(gl.LEQUAL);
 } //init_gl
 
-/*** document ready ***/
-$(document).ready(function() {
+/**
+ * document.ready
+ * Entry point
+ **/
+jQuery(document).ready(function() {
   main_canvas = document.getElementById("main-canvas");
   main_canvas.width = window.innerWidth;
   main_canvas.height = window.innerHeight;
   init_gl(main_canvas);
 
-  setup_scene();
-  start_render_loop();
+  init_graphics();
+  init_physics();
+  start_main_loop();
   show_stats();
 }); //document ready
 
@@ -73,23 +94,34 @@ $(document).ready(function() {
  * STATS
  **********************************************************/
 
-/*** show_stats ***/
+/**
+ * show_stats
+ * Shows the statistics window.
+ **/
 function show_stats() {
   if (stats_div === null) {
-    $("#main-stats").show();
+    jQuery("#main-stats").show();
     stats_div = document.getElementById("main-stats");
   } //if
 } //show_stats
 
-/*** hide_stats ***/
+/**
+ * hide_stats
+ * Hides the statistics window.
+ **/
 function hide_stats() {
-  $("#main-stats").hide();
+  jQuery("#main-stats").hide();
   stats_div = null;
 } //hide_stats
 
 /**********************************************************
  * WINDOW INPUT COMPONENT
  **********************************************************/
+
+/**
+ * WindowInputComponent
+ * GameObject Input Component to receive input from window.
+ **/
 function WindowInputComponent(game_object) {
   this.game_object = game_object;
   this.update = function() {};
@@ -115,23 +147,47 @@ function WindowInputComponent(game_object) {
   window.addEventListener("mouseover", this.mouseover, false);
 } //WindowInputComponent::Constructor
 
+/**
+ * WindowInputComponent::mouseout
+ * Listener for window's mouseout event.
+ **/
 WindowInputComponent.prototype.mouseout = function (e) {
 } //WindowInputComponent::mouseout
 
+/**
+ * WindowInputComponent::mousemove
+ * Listener for window's mousemove event.
+ **/
 WindowInputComponent.prototype.mousemove = function (e) {
   this.mouse.position[0] = e.pageX;
   this.mouse.position[1] = e.pageY;
 } //WindowInputComponent::mousemove
 
+/**
+ * WindowInputComponent::mouseover
+ * Listener for window's mouseover event.
+ **/
 WindowInputComponent.prototype.mouseover = function (e) {
 } //WindowInputComponent::mouseover
 
+/**
+ * WindowInputComponent::mousedown
+ * Listener for window's mousedown event.
+ **/
 WindowInputComponent.prototype.mousedown = function (e) {
 } //WindowInputComponent::mousedown
 
+/**
+ * WindowInputComponent::mouseup
+ * Listener for window's mouseup event.
+ **/
 WindowInputComponent.prototype.mouseup = function (e) {
 } //WindowInputComponent::mousedown
 
+/**
+ * WindowInputComponent::keydown
+ * Listener for window's keydown event.
+ **/
 WindowInputComponent.prototype.keydown = function (e) {
   this.keys[e.keyCode] = true;
   switch (e.keyCode) {
@@ -143,6 +199,10 @@ WindowInputComponent.prototype.keydown = function (e) {
   } //switch
 } //WindowInputComponent::keydown
 
+/**
+ * WindowInputComponent::keyup
+ * Listener for window's keyup event.
+ **/
 WindowInputComponent.prototype.keyup = function (e) {
   this.keys[e.keyCode] = false;
   switch (e.keyCode) {
@@ -154,30 +214,76 @@ WindowInputComponent.prototype.keyup = function (e) {
   } //switch
 } //WindowInputComponent::keyup
 
+/**
+ * PlayerPhysicsComponent
+ * GameObject Physics component for the player.
+ **/
+function PlayerPhysicsComponent(game_object) {
+  this.game_object = game_object;
+} //PlayerPhysicsComponent
+
+PlayerPhysicsComponent.prototype.update = function() {
+  var gc = this.game_object;
+  var ic = this.gc.input_component;
+  if (ic !== null) {
+    if (ic.action.up === true) {
+      gc.position[1] -=1;
+    } //if
+    if (ic.action.down === true) {
+      gc.position[1] +=1;
+    } //if
+    if (ic.action.left === true) {
+      gc.position[0] -= 1;
+    } //if
+    if (ic.action.right === true) {
+      gc.position[0] += 1;
+    } //if
+  } //if
+} //PlayerPhysicsComponent::update
+
 /**********************************************************
  * PLAYER LOGIC COMPONENT
  **********************************************************/
+/**
+ * PlayerLogicComponent
+ * GameObject Logic Component for the player.
+ **/
 function PlayerLogicComponent(game_object) {
   this.game_object = game_object;
 } //PlayerLogicComponent
 
+/**
+ * PlayerLogicComponent::update
+ * Advances logic for this frame.
+ **/
 PlayerLogicComponent.prototype.update = function () {
-
 } //PlayerLogicComponent::update
 
 /**********************************************************
  * GAME OBJECT
  **********************************************************/
+/**
+ * GameObject
+ * Encompasses an object in the game that may be controlled
+ * by physics or input, and have sound, graphics or logic.
+ **/
 function GameObject() {
   this.position = [0,0,0];
+  this.velocity = [0,0,0];
   this.rotation = [0,0,0];
+  this.acceleration = [0,0,0];
 
+  this.sound_component = null;
   this.physics_component = null;
   this.graphics_component = null;
   this.input_component = null;
   this.logic_component = null;
 } //GameObject::Constructor
 
+/**
+ * GameObject::update
+ * Advances all components for this frame
+ **/
 GameObject.prototype.update = function() {
   // update input component
   if (this.input_component !== null) {
@@ -203,6 +309,10 @@ GameObject.prototype.update = function() {
 /**********************************************************
  * LEVEL
  **********************************************************/
+/**
+ * Level
+ * Data for a level.
+ **/
 function Level(level_number) {
   this.id = 0;
 } //Level::Constructor
@@ -212,6 +322,12 @@ levels.push(new Level({
   objects: []
 }));
 
+/**
+ * load_level
+ * Prepares a level for use
+ *
+ * @level_num: id of level to load
+ **/
 function load_level(level_num) {
   if (level_num === 0) {
   } //if
@@ -220,26 +336,30 @@ function load_level(level_num) {
 /**********************************************************
  * RENDER & SCENE
  **********************************************************/
-
-/*** start_render_loop ***/
-function start_render_loop() {
-  if (render_loop_interval === 0) {
-    render_loop_interval = 1;
-    render();
+/**
+ * start_main_loop
+ * Starts the main loop
+ **/
+function start_main_loop() {
+  if (main_loop_interval === 0) {
+    main_loop_interval = 1;
+    main_loop();
   } //if
-} //start_render_loop
+} //start_main_loop
 
-/*** stop_render_loop ***/
-function stop_render_loop() {
-  render_loop_interval = 0;
-} //stop_render_loop
+/**
+ * stop_main_loop
+ * Stops the main loop indirectly
+ **/
+function stop_main_loop() {
+  main_loop_interval = 0;
+} //stop_main_loop
 
-/*** setup_scene ***/
-var test_box;
-var test_light;
-var test_particle_system;
-var test_emitter;
-function setup_scene() {
+/**
+ * init_graphics
+ * Prepares a CubicVR for use. Initializes the viewport, camera and initial sceneObjects.
+ **/
+function init_graphics() {
   octree = new OcTree(4000, 8);
   scene = new CubicVR.scene(main_canvas.width, main_canvas.height, 40, 0.1, 300, octree);
   scene.setSkyBox(new CubicVR.skyBox("content/skybox/clouds.jpg"));
@@ -286,9 +406,26 @@ function setup_scene() {
                               p_texture:new CubicVR.texture("content/particles/flare.png")});
    test_particle_system.addEmitter(test_emitter);
 
-} //setup_scene
+} //init_graphics
 
-/*** run timer ***/
+/**
+ * init_physics
+ **/
+function init_physics() {
+  var world_aabb = new b2AABB();
+  world_aabb.minVertex.Set(-1000, -1000);
+  world_aabb.maxVertex.Set(1000, 1000);
+
+  var gravity = new b2Vec2(0, 300);
+  var rest_sleep = true;
+  physics_world = new b2World(world_aabb, gravity, rest_sleep);
+
+} //init_physics
+
+/**
+ * run_timer
+ * Advances the game timer.
+ **/
 function run_timer()
 {
   if (!timerMilliseconds) {
@@ -303,20 +440,28 @@ function run_timer()
   timerMilliseconds = newTimerMilliseconds;
 } //run_timer
 
-/*** render ***/
-var xp = 0;
-function render() {
+/**
+ * main_loop 
+ * Main Loop
+ **/
+function main_loop() {
   xp += 0.01;
-  var time_before_render = new Date();
+  var time_before_loop = new Date();
+
+  /*** begin physics ***/
+  var time_step = 1.0/60;
+  var iteration = 1;
+  physics_world.Step(time_step, iteration);
+  /*** end physics ***/
 
   /** begin render **/
   run_timer();
   
   //for testing
   var c = CubicVR_Materials[test_box.obj.currentMaterial].color;
-  c[0] = (c[0] + xp/10);
-  c[1] = (c[1] + xp/20);
-  c[2] = (c[2] + xp/30);
+  c[0] = (c[0] + xp/100);
+  c[1] = (c[1] + xp/200);
+  c[2] = (c[2] + xp/300);
   if (c[0] > 1) c[0] = 0;
   if (c[1] > 1) c[1] = 0;
   if (c[2] > 1) c[2] = 0;
@@ -336,21 +481,20 @@ function render() {
   test_particle_system.draw(scene.camera.mvMatrix, scene.camera.pMatrix, timerSeconds);
   /** end render **/
 
-  var time_after_render = new Date();
-  var elapsed_render_time = time_after_render.getTime() - time_before_render.getTime();
-  if (render_loop_interval !== 0) {
-    if (elapsed_render_time < SPF) {
-      setTimeout(render, SPF)
-      //console.log(elapsed_render_time, "SPF", SPF);
+  /*** statistics ***/
+  var time_after_loop = new Date();
+  var elapsed_loop_time = time_after_loop.getTime() - time_before_loop.getTime();
+  if (main_loop_interval !== 0) {
+    if (elapsed_loop_time < SPF) {
+      setTimeout(main_loop, SPF)
     }
     else {
-      setTimeout(render, 0);
-      //console.log(elapsed_render_time, "now", 0);
+      setTimeout(main_loop, 0);
     } //if
   } //if
 
   /** stats **/
   if (stats_div !== null) {
-    stats_div.innerHTML = "FPS: " + Math.round(100/elapsed_render_time) + " | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
+    stats_div.innerHTML = "FPS: " + Math.round(100/elapsed_loop_time) + " | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
   } //if
-} //render
+} //main_loop
