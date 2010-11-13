@@ -29,6 +29,9 @@ var timerSeconds = 0;
 var timerLastSeconds = 0;
 var frameCounter = 0;
 
+/*** game engine ***/
+var game_engine;
+
 /*** game object ***/
 
 /*** physics ***/
@@ -85,6 +88,7 @@ jQuery(document).ready(function() {
   main_canvas.height = window.innerHeight;
   init_gl(main_canvas);
 
+  init_game_engine();
   init_graphics();
   init_physics();
   start_main_loop();
@@ -116,6 +120,28 @@ function hide_stats() {
 } //hide_stats
 
 /**********************************************************
+ * GAME ENGINE
+ **********************************************************/
+/**
+ * GameEngine
+ * To basically drive the objects in the game
+ **/
+function GameEngine() {
+  this.game_objects = [];
+} //GameEngine
+
+GameEngine.add_game_object = function (game_object) {
+  this.game_objects.push(game_object);
+} //GameEngine::add_game_object
+
+GameEngine.update = function () {
+  var go = this.game_objects;
+  for (var i = 0, l = go.length; i < l; ++i) {
+    go[i].update();
+  } //for
+} //GameEngine::update
+
+/**********************************************************
  * WINDOW INPUT COMPONENT
  **********************************************************/
 
@@ -139,6 +165,8 @@ function WindowInputComponent(game_object) {
     buttons: [false, false],
     position: [0, 0]
   };
+  window.addEventListener("MozOrientation", this.moz_orientation_change, false);
+  window.addEventListener("orientationchange", this.orientation_change, false);
   window.addEventListener("keydown", this.keydown, false);
   window.addEventListener("keyup", this.keyup, false);
   window.addEventListener("mousedown", this.mousedown, false);
@@ -147,6 +175,17 @@ function WindowInputComponent(game_object) {
   window.addEventListener("mouseout", this.mouseout, false);
   window.addEventListener("mouseover", this.mouseover, false);
 } //WindowInputComponent::Constructor
+
+/**
+ * WindowInputComponent::moz_orientation_change
+ * Listener for window orientation change on Mozilla browsers
+ **/
+WindowInputComponent.prototype.moz_orientation_change = function (e) {
+  this.action.left = e.x < 0 ? true : false;
+  this.action.right = e.x > 0 ? true : false;
+  this.action.up = e.y < 0 ? true : false;
+  this.action.down = e.y > 0 ? true : false;
+} //WindowInputComponent::moz_orientation_change
 
 /**
  * WindowInputComponent::mouseout
@@ -273,6 +312,7 @@ function GameObject() {
   this.velocity = [0,0,0];
   this.rotation = [0,0,0];
   this.acceleration = [0,0,0];
+  this.sleep = false;
 
   this.sound_component = null;
   this.physics_component = null;
@@ -408,6 +448,13 @@ function init_graphics() {
    test_particle_system.addEmitter(test_emitter);
 
 } //init_graphics
+
+/**
+ * init_game_engine
+ **/
+function init_game_engine() {
+  game_engine = new GameEngine();
+} //init_game_engine
 
 /**
  * init_physics
