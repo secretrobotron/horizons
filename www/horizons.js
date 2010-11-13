@@ -134,7 +134,7 @@ GameEngine.add_game_object = function (game_object) {
   this.game_objects.push(game_object);
 } //GameEngine::add_game_object
 
-GameEngine.update = function () {
+GameEngine.prototype.update = function () {
   var go = this.game_objects;
   for (var i = 0, l = go.length; i < l; ++i) {
     go[i].update();
@@ -515,12 +515,16 @@ function main_loop() {
   xp += 0.01;
   var time_before_loop = new Date();
 
-  /*** begin physics ***/
+  /** begin engine **/
+  game_engine.update();
+  /** end engine **/
+
+  /** begin physics **/
   var time_step = 1.0/60;
   var iteration = 1;
   physics_world.Step(time_step, iteration);
   test_box.position = [test_body.GetOriginPosition().x, test_body.GetOriginPosition().y, 10];
-  /*** end physics ***/
+  /** end physics **/
 
   /** begin render **/
   run_timer();
