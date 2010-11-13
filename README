@@ -1,1 +1,12 @@
 HORIZONS - A game created with open web technology.
+
+About
+  This game is a candidate for championship in the upcoming Mozilla Gaming Competition.
+
+Authors
+  Bobby Richter - @secretrobotron, secretrobotron@gmail.com
+
+Layout
+  design - Intended for design aspects of the game. Will include level editor, graphics editor, and any design docs that this project incepts.
+  server - For housing the multiplayer server.
+  www - Game content.
