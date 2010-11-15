@@ -51,6 +51,9 @@ var test_emitter;
 var test_body;
 var xp = 0;
 
+/*** sockets ***/
+var game_socket;
+
 /**********************************************************
  * INIT
  **********************************************************/
@@ -85,6 +88,14 @@ function init_gl(canvas) {
 } //init_gl
 
 /**
+ * init_socket
+ * Initialize WebSockets
+ **/
+function init_socket() {
+  game_socket = new GameSocket();
+} //init_socket
+
+/**
  * document.ready
  * Entry point
  **/
@@ -97,6 +108,7 @@ jQuery(document).ready(function() {
   init_game_engine();
   init_graphics();
   init_physics();
+  init_socket();
   start_main_loop();
   show_stats();
 }); //document ready
@@ -124,6 +136,71 @@ function hide_stats() {
   jQuery("#main-stats").hide();
   stats_div = null;
 } //hide_stats
+
+/**********************************************************
+ * GAME SOCKET
+ **********************************************************/
+/**
+ * GameSocket
+ * Send/Receives realtime data to/from server
+ **/
+function GameSocket() {
+  this.current_player_id = -1;
+  this.ready = false;
+  this.response_id = 0;
+  this.response_listeners = [];
+  this.socket = new WebSocket("ws://localhost:9000/game");
+  var that = this;
+  this.socket.onopen = function(e) {that.on_connect(e);};
+  this.socket.onmessage = function(e) {that.on_receive(e);};
+  this.socket.onclose = function(e) {that.on_close(e);};
+} //GameSocket
+
+/**
+ * GameSocket::send_message
+ * Sends a message to the server and waits for a response if response_listener !== null
+ **/
+GameSocket.prototype.send_message = function(message, data, response_listener, that) {
+  if (response_listener !== undefined && response_listener !== null) {
+    this.socket.send(JSON.stringify({message: message, data:data, response_id: this.response_id}));
+    this.response_listeners.push({id:this.response_id, listener:response_listener, that: that});
+    ++this.response_id;
+  }
+  else {
+    this.socket.send({message: message, data:data});
+  } //if
+} //GameSocket::send_message
+
+GameSocket.prototype.receive_player_id = function(d) {
+  this.current_player_id = d;
+} //GameSocket::receive_player_id
+
+GameSocket.prototype.on_connect = function(e) {
+  this.ready = true;
+  this.send_message('get_player_id', null, this.receive_player_id, this);
+} //GameSocket::on_connect
+
+GameSocket.prototype.on_close = function(e) {
+  this.ready = false;
+} //GameSocket::on_close
+
+GameSocket.prototype.on_receive = function(e) {
+  var data = JSON.parse(e.data);
+  if (data.response_id !== null && data.response_id !== undefined) {
+    var response_listener = null;
+    for (var i = 0, l = this.response_listeners.length; i < l; ++i) {
+      if (this.response_listeners[i].id === data.response_id) {
+        response_listener = this.response_listeners[i];
+        this.response_listeners.splice(i, 1);
+        break;
+      } //if
+    } //for
+    if (response_listener !== null) {
+      if (response_listener.that !== undefined) response_listener.listener.call(response_listener.that, data.data);
+      else response_listener.listener(data.data);
+    } //if
+  } //if
+} //GameSocket::on_receive
 
 /**********************************************************
  * GAME ENGINE
@@ -573,6 +650,9 @@ function main_loop() {
 
   /** stats **/
   if (stats_div !== null) {
-    stats_div.innerHTML = "FPS: " + Math.round(100/elapsed_loop_time) + " | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
+    var s = "FPS: " + Math.round(10/elapsed_loop_time) + " | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
+    if (game_socket.ready) s += "| Connected: " + game_socket.current_player_id;
+    else s += "| Disconnected";
+    stats_div.innerHTML = s;
   } //if
 } //main_loop
