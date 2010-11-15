@@ -314,10 +314,10 @@ WindowInputComponent.prototype.mouseup = function (e) {
 WindowInputComponent.prototype.keydown = function (e) {
   this.keys[e.keyCode] = true;
   switch (e.keyCode) {
-    case 37: this.action.left = false; break;
-    case 38: this.action.up = false; break;
-    case 39: this.action.right = false; break;
-    case 40: this.action.down = false; break;
+    case 37: this.action.left = true; break;
+    case 38: this.action.up = true; break;
+    case 39: this.action.right = true; break;
+    case 40: this.action.down = true; break;
     default: break;
   } //switch
 } //WindowInputComponent::keydown
@@ -329,10 +329,10 @@ WindowInputComponent.prototype.keydown = function (e) {
 WindowInputComponent.prototype.keyup = function (e) {
   this.keys[e.keyCode] = false;
   switch (e.keyCode) {
-    case 37: this.action.left = true; break;
-    case 38: this.action.up = true; break;
-    case 39: this.action.right = true; break;
-    case 40: this.action.down = true; break;
+    case 37: this.action.left = false; break;
+    case 38: this.action.up = false; break;
+    case 39: this.action.right = false; break;
+    case 40: this.action.down = false; break;
     default: break;
   } //switch
 } //WindowInputComponent::keyup
