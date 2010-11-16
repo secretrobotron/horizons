@@ -44,11 +44,8 @@ var game_engine;
 var physics_world;
 
 /*** testing ***/
-var test_box;
+var test_player_game_object;
 var test_light;
-var test_particle_system;
-var test_emitter;
-var test_body;
 var xp = 0;
 
 /*** sockets ***/
@@ -109,6 +106,40 @@ jQuery(document).ready(function() {
   init_graphics();
   init_physics();
   init_socket();
+
+  //for testing - begin build player
+  var box_material = new CubicVR.material("test");
+  box_material.color = [1,0,0];
+  var box_object = new CubicVR.object();
+  CubicVR.genBoxObject(box_object, .5, box_material);
+  box_object.calcNormals();
+  box_object.triangulateQuads();
+  box_object.compile();
+  var scene_object = new CubicVR.sceneObject(box_object);
+  scene_object.position = [0, 0, 0];
+  scene.bindSceneObject(scene_object);
+
+  var sd = new b2BoxDef();
+	var bd = new b2BodyDef();
+	bd.AddShape(sd);
+	sd.density = 1.0;
+	sd.friction = 0.5;
+  sd.radius = 1.0;
+	sd.extents.Set(1, 1);
+  bd.position.Set(0, 50);
+  var body = physics_world.CreateBody(bd);
+
+  var ic = new WindowInputComponent();
+  var lc = new InputLogicComponent();
+
+  test_player_game_object = new GameObject();
+  test_player_game_object.attach_physics_component(body);
+  test_player_game_object.attach_graphics_component(scene_object);
+  test_player_game_object.attach_input_component(ic);
+  test_player_game_object.attach_logic_component(lc);
+  game_engine.add_game_object(test_player_game_object);
+  //for testing - end build player
+
   start_main_loop();
   show_stats();
 }); //document ready
@@ -213,7 +244,7 @@ function GameEngine() {
   this.game_objects = [];
 } //GameEngine
 
-GameEngine.add_game_object = function (game_object) {
+GameEngine.prototype.add_game_object = function (game_object) {
   this.game_objects.push(game_object);
 } //GameEngine::add_game_object
 
@@ -225,15 +256,13 @@ GameEngine.prototype.update = function () {
 } //GameEngine::update
 
 /**********************************************************
- * WINDOW INPUT COMPONENT
+ * INPUT COMPONENT
  **********************************************************/
-
 /**
  * WindowInputComponent
  * GameObject Input Component to receive input from window.
  **/
-function WindowInputComponent(game_object) {
-  this.game_object = game_object;
+function WindowInputComponent() {
   this.update = function() {};
   this.action = {
     up:     false,
@@ -248,15 +277,16 @@ function WindowInputComponent(game_object) {
     buttons: [false, false],
     position: [0, 0]
   };
-  window.addEventListener("MozOrientation", this.moz_orientation_change, false);
-  window.addEventListener("orientationchange", this.orientation_change, false);
-  window.addEventListener("keydown", this.keydown, false);
-  window.addEventListener("keyup", this.keyup, false);
-  window.addEventListener("mousedown", this.mousedown, false);
-  window.addEventListener("mouseup", this.mouseup, false);
-  window.addEventListener("mousemove", this.mousemove, false);
-  window.addEventListener("mouseout", this.mouseout, false);
-  window.addEventListener("mouseover", this.mouseover, false);
+  var that = this;
+  window.addEventListener("MozOrientation", function(e){that.moz_orientation_change.call(that, e);}, false);
+  window.addEventListener("orientationchange", function(e){that.orientation_change.call(that,e);}, false);
+  window.addEventListener("keydown", function(e){that.keydown.call(that,e);}, false);
+  window.addEventListener("keyup", function(e){that.keyup.call(that,e);}, false);
+  window.addEventListener("mousedown", function(e){that.mousedown.call(that,e);}, false);
+  window.addEventListener("mouseup", function(e){that.mouseup.call(that,e);}, false);
+  window.addEventListener("mousemove", function(e){that.mousemove.call(that,e);}, false);
+  window.addEventListener("mouseout", function(e){that.mouseout.call(that,e);}, false);
+  window.addEventListener("mouseover", function(e){that.mouseover.call(that,e);}, false);
 } //WindowInputComponent::Constructor
 
 /**
@@ -337,50 +367,73 @@ WindowInputComponent.prototype.keyup = function (e) {
   } //switch
 } //WindowInputComponent::keyup
 
-/**
- * PlayerPhysicsComponent
- * GameObject Physics component for the player.
- **/
-function PlayerPhysicsComponent(game_object) {
-  this.game_object = game_object;
-} //PlayerPhysicsComponent
-
-PlayerPhysicsComponent.prototype.update = function() {
-  var gc = this.game_object;
-  var ic = this.gc.input_component;
-  if (ic !== null) {
-    if (ic.action.up === true) {
-      gc.position[1] -=1;
-    } //if
-    if (ic.action.down === true) {
-      gc.position[1] +=1;
-    } //if
-    if (ic.action.left === true) {
-      gc.position[0] -= 1;
-    } //if
-    if (ic.action.right === true) {
-      gc.position[0] += 1;
-    } //if
-  } //if
-} //PlayerPhysicsComponent::update
-
 /**********************************************************
- * PLAYER LOGIC COMPONENT
+ * LOGIC COMPONENT
  **********************************************************/
 /**
- * PlayerLogicComponent
- * GameObject Logic Component for the player.
+ * BasicLogicComponent
  **/
-function PlayerLogicComponent(game_object) {
-  this.game_object = game_object;
-} //PlayerLogicComponent
+function BasicLogicComponent() {
+  this.game_object = null;
+} //BasicLogicComponent
 
 /**
- * PlayerLogicComponent::update
+ * BasicLogicComponent::update
+ **/
+BasicLogicComponent.prototype.update = function() {
+  var go = this.game_object;
+  if (go !== null) {
+    var pc = go.physics_component;
+    var gc = go.graphics_component;
+    var op = pc.GetOriginPosition();
+    if (pc !== null) {
+      go.position[0] = op.x;
+      go.position[1] = op.y;
+      go.rotation[2] = pc.GetRotation();
+    } //if
+    if (gc !== null) {
+      gc.position[0] = go.position[0];
+      gc.position[1] = go.position[1];
+      gc.position[2] = go.position[2];
+      gc.rotation[0] = go.rotation[0];
+      gc.rotation[1] = go.rotation[1];
+      gc.rotation[2] = go.rotation[2];
+    } //if
+  } //if
+} //BasicLogicComponent::update
+
+/**
+ * InputLogicComponent
+ * GameObject Logic Component for interacting with an Input Component.
+ **/
+function InputLogicComponent() {
+  BasicLogicComponent.call(this);
+} //InputLogicComponent
+
+/**
+ * InputLogicComponent::update
  * Advances logic for this frame.
  **/
-PlayerLogicComponent.prototype.update = function () {
-} //PlayerLogicComponent::update
+InputLogicComponent.prototype.update = function () {
+  var go = this.game_object;
+  var ic = go.input_component;
+  var pc = go.physics_component;
+  if (ic !== null && pc !== null) {
+    if (ic.action.up === true) {
+      pc.ApplyImpulse(new b2Vec2(0, 1), pc.GetCenterPosition());
+    } //if
+    if (ic.action.down === true) {
+      pc.ApplyImpulse(new b2Vec2(0, -1), pc.GetCenterPosition());
+    } //if
+    if (ic.action.left === true) {
+      pc.ApplyImpulse(new b2Vec2(1, 0), pc.GetCenterPosition());
+    } //if
+    if (ic.action.right === true) {
+      pc.ApplyImpulse(new b2Vec2(-1, 0), pc.GetCenterPosition());
+    } //if
+  } //if
+  BasicLogicComponent.prototype.update.call(this);
+} //InputLogicComponent::update
 
 /**********************************************************
  * GAME OBJECT
@@ -394,7 +447,6 @@ function GameObject() {
   this.position = [0,0,0];
   this.velocity = [0,0,0];
   this.rotation = [0,0,0];
-  this.acceleration = [0,0,0];
   this.sleep = false;
 
   this.sound_component = null;
@@ -405,28 +457,56 @@ function GameObject() {
 } //GameObject::Constructor
 
 /**
+ * GameObject::attach_physics_component
+ * Attaches and registers physics component
+ **/
+GameObject.prototype.attach_physics_component = function (c) {
+  this.physics_component = c;
+} //GameObject::attach_physics_component
+
+/**
+ * GameObject::attach_sound_component
+ * Attaches and registers sound component
+ **/
+GameObject.prototype.attach_sound_component = function (c) {
+  this.sound_component = c;
+} //GameObject::attach_sound_component
+
+/**
+ * GameObject::attach_input_component
+ * Attaches and registers input component
+ **/
+GameObject.prototype.attach_input_component = function (c) {
+  this.input_component = c;
+} //GameObject::attach_input_component
+
+/**
+ * GameObject::attach_graphics_component
+ * Attaches and registers graphics component
+ **/
+GameObject.prototype.attach_graphics_component = function (c) {
+  this.graphics_component = c;
+} //GameObject::attach_graphics_component
+
+/**
+ * GameObject::attach_logic_component
+ * Attaches and registers logic component
+ **/
+GameObject.prototype.attach_logic_component = function (c) {
+  if(c !== null) c.game_object = this;
+  this.logic_component = c;
+} //GameObject::attach_logic_component
+
+/**
  * GameObject::update
  * Advances all components for this frame
  **/
 GameObject.prototype.update = function() {
-  // update input component
   if (this.input_component !== null) {
     this.input_component.update();
   } //if
-
-  // update logic component
   if (this.logic_component !== null) {
     this.logic_component.update();
-  } //if
-
-  // update physics component
-  if (this.physics_component !== null) {
-    this.physics_component.update();
-  } //if
-
-  // update graphics component
-  if (this.graphics_component !== null) {
-    this.graphics_component.update();
   } //if
 } //GameObject::update
 
@@ -493,42 +573,12 @@ function init_graphics() {
   scene.camera.setDimensions(main_canvas.width, main_canvas.height);
 
   /** for testing **/
-  var box_material = new CubicVR.material("test");
-  box_material.color = [1, 0, 0];
-  var box_object = new CubicVR.object();
-  CubicVR.genBoxObject(box_object, .5, box_material);
-  box_object.calcNormals();
-  box_object.triangulateQuads();
-  box_object.compile();
-  var scene_object = new CubicVR.sceneObject(box_object);
-  scene_object.position = [0, 0, 10];
-  scene.bindSceneObject(scene_object);
-  test_box = scene_object;
   var light = new cubicvr_light(LIGHT_TYPE_POINT);
   light.position = [0, 0, 0];
   light.distance = 200.0;
   light.intensity = 3.0;
   scene.bindLight(light);
   test_light = light;
-
-  test_particle_system = new cubicvr_particleSystem(10000,true,new CubicVR.texture("content/particles/flare.png"),640,640,true);
-  test_emitter = new cubicvr_particleEmitter({ 
-                              name:"test",
-                              position:[0, 0, 0],
-                              emission_rate:.01, 
-                              emission_size:20, 
-                              max_particles:5000,
-                              max_visible_particles:5000,
-                              alpha: true,
-                              p_base_velocity: [0, 0, 0],
-                              p_velocity_variance: [2, 2, 2],
-                              p_base_accel: [0, 0, 0],
-                              p_life:0.5, 
-                              p_life_variance:0.1, 
-                              p_base_color:[.5,.5,.5], 
-                              p_color_variance:[1,1,1],
-                              p_texture:new CubicVR.texture("content/particles/flare.png")});
-   test_particle_system.addEmitter(test_emitter);
 
 } //init_graphics
 
@@ -550,17 +600,6 @@ function init_physics() {
   var gravity = new b2Vec2(0, -3.0);
   var rest_sleep = true;
   physics_world = new b2World(world_aabb, gravity, rest_sleep);
-
-  var sd = new b2BoxDef();
-	var bd = new b2BodyDef();
-	bd.AddShape(sd);
-	sd.density = 1.0;
-	sd.friction = 0.5;
-  sd.radius = 1.0;
-	sd.extents.Set(1, 1);
-
-  bd.position.Set(0, 1);
-	test_body = physics_world.CreateBody(bd);
 
   var groundSd = new b2BoxDef();
 	groundSd.extents.Set(1000, 1);
@@ -594,9 +633,12 @@ function run_timer()
  * main_loop 
  * Main Loop
  **/
+var last_loop_time = new Date().getTime();
+var camera_follow_speed = 0.1;
+var camera_position_target = [0,0,0];
 function main_loop() {
   xp += 0.01;
-  var time_before_loop = new Date();
+  //var time_before_loop = new Date();
 
   /** begin engine **/
   game_engine.update();
@@ -606,53 +648,47 @@ function main_loop() {
   var time_step = 1.0/60;
   var iteration = 1;
   physics_world.Step(time_step, iteration);
-  test_box.position = [test_body.GetOriginPosition().x, test_body.GetOriginPosition().y, 10];
   /** end physics **/
 
   /** begin render **/
   run_timer();
   
   //for testing
-  var c = CubicVR_Materials[test_box.obj.currentMaterial].color;
-  c[0] = (c[0] + xp/100);
-  c[1] = (c[1] + xp/200);
-  c[2] = (c[2] + xp/300);
-  if (c[0] > 1) c[0] = 0;
-  if (c[1] > 1) c[1] = 0;
-  if (c[2] > 1) c[2] = 0;
-  CubicVR_Materials[test_box.obj.currentMaterial].color = c;
-  test_box.rotation = [xp*300, xp*100, xp*200];
   test_light.position = [Math.sin(xp*10)*5, 0, 10 + Math.cos(xp*10)*5];
 
-  test_particle_system.update(timerSeconds);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  scene.camera.target = [0, 0, 1];
-  scene.camera.position = [0, 0, 0];
-  scene.render();
 
-  test_emitter.position = [test_light.position[0], test_light.position[1], test_light.position[2]];
-  var mvMatrix = CubicVR.lookat(30.0, 30.0, 30.0, 0, 30, 0, 0, 1, 0);
-	var pMatrix = CubicVR.perspective(40, 1.0, 0.1, 1000.0); 
-  test_particle_system.draw(scene.camera.mvMatrix, scene.camera.pMatrix, timerSeconds);
+  //trailing camera
+  camera_position_target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2] - 10];
+  scene.camera.position[0] -= (scene.camera.position[0] - camera_position_target[0]) * camera_follow_speed;
+  scene.camera.position[1] -= (scene.camera.position[1] - camera_position_target[1]) * camera_follow_speed;
+  scene.camera.position[2] -= (scene.camera.position[2] - camera_position_target[2]) * camera_follow_speed;
+  scene.camera.target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2]];
+
+  scene.render();
   /** end render **/
 
   /*** statistics ***/
-  var time_after_loop = new Date();
-  var elapsed_loop_time = time_after_loop.getTime() - time_before_loop.getTime();
+  var time_after_loop = new Date().getTime();
+  var elapsed_loop_time = time_after_loop - last_loop_time;
+  var limited = false;
   if (main_loop_interval !== 0) {
     if (elapsed_loop_time < SPF) {
-      setTimeout(main_loop, SPF)
+      setTimeout(main_loop, SPF);
+      limited = true;
     }
     else {
       setTimeout(main_loop, 0);
     } //if
   } //if
 
+  last_loop_time = time_after_loop;
+
   /** stats **/
   if (stats_div !== null) {
-    var s = "FPS: " + Math.round(10/elapsed_loop_time) + " | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
-    if (game_socket.ready) s += "| Connected: " + game_socket.current_player_id;
-    else s += "| Disconnected";
+    var s = "FPS: " + Math.round(1000/elapsed_loop_time) + " ["+(limited?'Capped (too fast)':'Uncapped (too slow)')+"] | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
+    if (game_socket.ready) s += "| Connected to Server: " + game_socket.current_player_id;
+    else s += "| Disconnected from Server";
     stats_div.innerHTML = s;
   } //if
 } //main_loop
