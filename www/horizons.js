@@ -51,6 +51,14 @@ var xp = 0;
 /*** sockets ***/
 var game_socket;
 
+/*** descriptions ***/
+var descriptions = [];
+var test_description_1 = new ObjectDescription('test1');
+var test_description_2 = new ObjectDescription('test2');
+test_description_1.children = [{name:'test2',offset:[0,1]}];
+descriptions['test1'] = test_description_1;
+descriptions['test2'] = test_description_2;
+
 /**********************************************************
  * INIT
  **********************************************************/
@@ -436,6 +444,37 @@ InputLogicComponent.prototype.update = function () {
 } //InputLogicComponent::update
 
 /**********************************************************
+ * OBJECT DESCRIPTION
+ **********************************************************/
+/**
+ * ObjectDescription
+ * Describes an object. May be compiled from smaller objects.
+ **/
+function ObjectDescription(name) {
+  this.name = name;
+  this.children = [];
+} //ObjectDescription::Constructor
+
+/**
+ * ObjectDescription::get_instance
+ * Constructs an instance of the object from its description.
+ **/
+ObjectDescription.prototype.get_instance = function () {
+  return new ObjectDescriptionInstance(this);
+} //ObjectDescriptoin::get_instance
+
+/**
+ * ObjectDescriptionInstace
+ * Holds instanced information of a description
+ **/
+function ObjectDescriptionInstance(description) {
+  this.description = description;
+  this.children = [];
+  this.offset = [0,0];
+  this.rotation = 0;
+} //ObjectDescriptionInstance::Constructor
+
+/**********************************************************
  * GAME OBJECT
  **********************************************************/
 /**
@@ -449,12 +488,32 @@ function GameObject() {
   this.rotation = [0,0,0];
   this.sleep = false;
 
+  this.object_description = null;
+
   this.sound_component = null;
   this.physics_component = null;
   this.graphics_component = null;
   this.input_component = null;
   this.logic_component = null;
 } //GameObject::Constructor
+
+/**
+ * GameObject::build_from_description
+ * Constructs a game object from consituents according to description
+ **/
+GameObject.prototype.build_from_description = function (d) {
+  this.object_description = d;
+} //GameObject::build_from_description
+
+/**
+ * GameObject::break_apart
+ * Breaks an object up into its constituents according to description
+ *
+ * @force - the force with which to scatter objects once they've broken
+ **/
+GameObject.prototype.break_apart = function (force) {
+
+} //GameObject::break_apart
 
 /**
  * GameObject::attach_physics_component
@@ -607,7 +666,7 @@ function init_physics() {
 	var groundBd = new b2BodyDef();
 	groundBd.AddShape(groundSd);
 	groundBd.position.Set(-500, -2);
-	physics_world.CreateBody(groundBd)
+	physics_world.CreateBody(groundBd);
 
 } //init_physics
 
