@@ -9,14 +9,13 @@
  **********************************************************/
 
 /*** FPS ***/
-var FPS = 30;
+var FPS = 50;
 var SPF = 1000/FPS;
 
 /*** canvas & gl ***/
 var main_canvas;
 var main_canvas_ctx;
 var gl;
-var main_loop_interval = 0;
 
 /*** stats ***/
 var stats_div = null;
@@ -51,6 +50,9 @@ var xp = 0;
 /*** sockets ***/
 var game_socket;
 
+/*** interval ***/
+var main_loop_interval;
+
 /**********************************************************
  * INIT
  **********************************************************/
@@ -68,7 +70,7 @@ function init_gl(canvas) {
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
   catch(e) {
-    console.log(e);
+    throw(e);
   } //try
 
   if (!gl) {
@@ -91,6 +93,7 @@ function init_gl(canvas) {
 function init_socket() {
   game_socket = new GameSocket();
 } //init_socket
+
 
 /**
  * document.ready
@@ -141,6 +144,7 @@ jQuery(document).ready(function() {
   //for testing - end build player
 
   start_main_loop();
+
   show_stats();
 }); //document ready
 
@@ -540,15 +544,23 @@ function load_level(level_num) {
 /**********************************************************
  * RENDER & SCENE
  **********************************************************/
+
+/**
+ * requestFrame
+ **/
+var requestFrame = function() {};
+
 /**
  * start_main_loop
  * Starts the main loop
  **/
 function start_main_loop() {
-  if (main_loop_interval === 0) {
-    main_loop_interval = 1;
-    main_loop();
-  } //if
+  if (typeof window.mozRequestAnimationFrame === "function") {
+    window.addEventListener("MozBeforePaint", main_loop, false);
+    (requestFrame = function() { window.mozRequestAnimationFrame(); })();
+  } else {
+    main_loop_interval = setInterval(main_loop, FPS);
+  } //if 
 } //start_main_loop
 
 /**
@@ -556,7 +568,9 @@ function start_main_loop() {
  * Stops the main loop indirectly
  **/
 function stop_main_loop() {
-  main_loop_interval = 0;
+  if (main_loop_interval) {
+    clearInterval(main_loop_interval);
+  } //if
 } //stop_main_loop
 
 /**
@@ -672,16 +686,7 @@ function main_loop() {
   var time_after_loop = new Date().getTime();
   var elapsed_loop_time = time_after_loop - last_loop_time;
   var limited = false;
-  if (main_loop_interval !== 0) {
-    if (elapsed_loop_time < SPF) {
-      setTimeout(main_loop, SPF);
-      limited = true;
-    }
-    else {
-      setTimeout(main_loop, 0);
-    } //if
-  } //if
-
+  
   last_loop_time = time_after_loop;
 
   /** stats **/
@@ -691,4 +696,5 @@ function main_loop() {
     else s += "| Disconnected from Server";
     stats_div.innerHTML = s;
   } //if
+  requestFrame();
 } //main_loop
