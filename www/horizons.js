@@ -9,14 +9,13 @@
  **********************************************************/
 
 /*** FPS ***/
-var FPS = 30;
+var FPS = 50;
 var SPF = 1000/FPS;
 
 /*** canvas & gl ***/
 var main_canvas;
 var main_canvas_ctx;
 var gl;
-var main_loop_interval = 0;
 
 /*** stats ***/
 var stats_div = null;
@@ -59,6 +58,9 @@ test_description_1.children = [{name:'test2',offset:[0,1]}];
 descriptions['test1'] = test_description_1;
 descriptions['test2'] = test_description_2;
 
+/*** interval ***/
+var main_loop_interval;
+
 /**********************************************************
  * INIT
  **********************************************************/
@@ -76,7 +78,7 @@ function init_gl(canvas) {
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
   catch(e) {
-    console.log(e);
+    throw(e);
   } //try
 
   if (!gl) {
@@ -100,6 +102,7 @@ function init_socket() {
   game_socket = new GameSocket();
 } //init_socket
 
+
 /**
  * document.ready
  * Entry point
@@ -114,6 +117,8 @@ jQuery(document).ready(function() {
   init_graphics();
   init_physics();
   init_socket();
+
+  load_level(0);
 
   //for testing - begin build player
   var box_material = new CubicVR.material("test");
@@ -131,10 +136,10 @@ jQuery(document).ready(function() {
 	var bd = new b2BodyDef();
 	bd.AddShape(sd);
 	sd.density = 1.0;
-	sd.friction = 0.5;
-  sd.radius = 1.0;
+  sd.restitution = 0.0;
+	sd.friction = 1;
 	sd.extents.Set(1, 1);
-  bd.position.Set(0, 50);
+  bd.position.Set(0, 10);
   var body = physics_world.CreateBody(bd);
 
   var ic = new WindowInputComponent();
@@ -149,6 +154,7 @@ jQuery(document).ready(function() {
   //for testing - end build player
 
   start_main_loop();
+
   show_stats();
 }); //document ready
 
@@ -576,12 +582,14 @@ GameObject.prototype.update = function() {
  * Level
  * Data for a level.
  **/
-function Level(level_number) {
-  this.id = 0;
+function Level(level_description) {
+  this.id = level_description.id;
+  this.terrain = level_description.terrain;
+  this.objects = level_description.objects;
 } //Level::Constructor
 
 levels.push(new Level({
-  terrain: [],
+  terrain: [[0,0], [1,0], [2,1], [3,-1]],
   objects: []
 }));
 
@@ -592,22 +600,59 @@ levels.push(new Level({
  * @level_num: id of level to load
  **/
 function load_level(level_num) {
-  if (level_num === 0) {
-  } //if
+  var level = levels[level_num];
+  uv_mapper = new CubicVR.uvmapper();
+  uv_mapper.projection_mode = UV_PROJECTION_CUBIC;
+  uv_mapper.projection_axis = UV_AXIS_Y;
+  uv_mapper.wrap_w_count = 5.0;
+  uv_mapper.scale = [1, 1, 1];
+
+  var landscape;
+  var landscape_size = 500;
+  var landscape_material = new CubicVR.material("landscape");
+  landscape_material.setTexture(new CubicVR.texture("content/terrain/grid.jpg"));
+  landscape = new CubicVR.landscape(landscape_size, 2, 2, landscape_material);
+  for (var i=0, l=landscape.obj.points.length; i<l ;++i) {
+  } //for
+  landscape.obj.calcNormals();
+  uv_mapper.apply(landscape.obj, landscape_material);
+  landscape.obj.compile();
+
+  var ground_def = new b2BoxDef();
+	ground_def.extents.Set(landscape_size, 1);
+  ground_def.density = 0.0;
+  ground_def.friction = 0;
+  ground_def.restitution = 0.0;
+	var ground_body = new b2BodyDef();
+	ground_body.AddShape(ground_def);
+	ground_body.position.Set(-50, -1);
+
+  level.landscape_graphics_component = landscape;
+  level.landscape_physics_component = physics_world.CreateBody(ground_body);
+
+  current_level = level;
 } //load_level
 
 /**********************************************************
  * RENDER & SCENE
  **********************************************************/
+
+/**
+ * requestFrame
+ **/
+var requestFrame = function() {};
+
 /**
  * start_main_loop
  * Starts the main loop
  **/
 function start_main_loop() {
-  if (main_loop_interval === 0) {
-    main_loop_interval = 1;
-    main_loop();
-  } //if
+  if (typeof window.mozRequestAnimationFrame === "function") {
+    window.addEventListener("MozBeforePaint", main_loop, false);
+    (requestFrame = function() { window.mozRequestAnimationFrame(); })();
+  } else {
+    main_loop_interval = setInterval(main_loop, FPS);
+  } //if 
 } //start_main_loop
 
 /**
@@ -615,7 +660,9 @@ function start_main_loop() {
  * Stops the main loop indirectly
  **/
 function stop_main_loop() {
-  main_loop_interval = 0;
+  if (main_loop_interval) {
+    clearInterval(main_loop_interval);
+  } //if
 } //stop_main_loop
 
 /**
@@ -659,15 +706,6 @@ function init_physics() {
   var gravity = new b2Vec2(0, -3.0);
   var rest_sleep = true;
   physics_world = new b2World(world_aabb, gravity, rest_sleep);
-
-  var groundSd = new b2BoxDef();
-	groundSd.extents.Set(1000, 1);
-	groundSd.restitution = 0.2;
-	var groundBd = new b2BodyDef();
-	groundBd.AddShape(groundSd);
-	groundBd.position.Set(-500, -2);
-	physics_world.CreateBody(groundBd);
-
 } //init_physics
 
 /**
@@ -725,22 +763,20 @@ function main_loop() {
   scene.camera.target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2]];
 
   scene.render();
+
+  if (current_level.landscape !== null) {
+    var landscape = current_level.landscape_graphics_component;
+    var camera = scene.camera;
+  	CubicVR.renderObject(landscape.obj, camera.mvMatrix, camera.pMatrix,cubicvr_identity, []);
+  } //if
+  
   /** end render **/
 
   /*** statistics ***/
   var time_after_loop = new Date().getTime();
   var elapsed_loop_time = time_after_loop - last_loop_time;
   var limited = false;
-  if (main_loop_interval !== 0) {
-    if (elapsed_loop_time < SPF) {
-      setTimeout(main_loop, SPF);
-      limited = true;
-    }
-    else {
-      setTimeout(main_loop, 0);
-    } //if
-  } //if
-
+  
   last_loop_time = time_after_loop;
 
   /** stats **/
@@ -750,4 +786,5 @@ function main_loop() {
     else s += "| Disconnected from Server";
     stats_div.innerHTML = s;
   } //if
+  requestFrame();
 } //main_loop
