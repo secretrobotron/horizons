@@ -86,7 +86,7 @@ function init_gl(canvas) {
     return;
   } //if
 
-  CubicVR.core.init(gl,"core-shader-vs","core-shader-fs");
+  CubicVR.GLCore.init(gl,"core-shader-vs","core-shader-fs");
 
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clearDepth(1.0);
@@ -116,19 +116,19 @@ jQuery(document).ready(function() {
   init_game_engine();
   init_graphics();
   init_physics();
-  init_socket();
-
-  load_level(0);
+  //init_socket();
+  current_level = new Level();
+  scene.bindSceneObject(current_level.scene_object);
 
   //for testing - begin build player
-  var box_material = new CubicVR.material("test");
+  var box_material = new CubicVR.Material("test");
   box_material.color = [1,0,0];
-  var box_object = new CubicVR.object();
+  var box_object = new CubicVR.Mesh();
   CubicVR.genBoxObject(box_object, .5, box_material);
   box_object.calcNormals();
   box_object.triangulateQuads();
   box_object.compile();
-  var scene_object = new CubicVR.sceneObject(box_object);
+  var scene_object = new CubicVR.SceneObject(box_object);
   scene_object.position = [0, 0, 0];
   scene.bindSceneObject(scene_object);
 
@@ -582,39 +582,73 @@ GameObject.prototype.update = function() {
  * Level
  * Data for a level.
  **/
-function Level(level_description) {
-  this.id = level_description.id;
-  this.terrain = level_description.terrain;
-  this.objects = level_description.objects;
-} //Level::Constructor
+function Level() {
+  this.objects = [];
+  this.verts = [];
 
-levels.push(new Level({
-  terrain: [[0,0], [1,0], [2,1], [3,-1]],
-  objects: []
-}));
+  this.mesh = new CubicVR.Mesh();
+  var faces = [];
+  var pts = [];
+  for (var i=0; i<level_data.verts.length; ++i) {
+    var x,y;
+    x = parseFloat(level_data.verts[i].x)/25;
+    y = parseFloat(level_data.verts[i].y)/25;
+    this.verts.push([x,y]);
+    pts.push([x,y,0]);
+    pts.push([x,y,10]);
+    //pts.push([i-10,Math.sin(i),0]);
+    //pts.push([i-10,Math.sin(i),10]);
+  } //for
+  this.mesh.addPoint(pts);
+  for (var i=1; i < level_data.verts.length; ++i) {
+    this.mesh.addFace([2*i+1,2*i,2*i-2,2*i-1]);
+  } //for
+  this.mesh.calcNormals();
+  this.mesh.triangulateQuads();
+
+  this.material = new CubicVR.Material('level-mat');
+  this.mesh.setFaceMaterial(this.material);
+  for (var i=0; i < this.mesh.faces.length; ++i) {
+    this.mesh.faces[i].setUV([0,0],0);
+    this.mesh.faces[i].setUV([0,1],1);
+    this.mesh.faces[i].setUV([1,1],2);
+    this.mesh.faces[i].setUV([1,0],3);
+  } //for
+  
+  /*
+  var uv_mapper = new CubicVR.UVMapper();
+  uv_mapper.projection_mode = CubicVR.enums.uv.projection.CUBIC;
+  uv_mapper.projection_axis = CubicVR.enums.uv.axis.Y;
+  uv_mapper.wrap_w_count = 5.0;
+  uv_mapper.scale = [1, 1, 1];
+  uv_mapper.apply(this.mesh, this.material);
+  */
+
+  this.mesh.compile();
+
+  this.material.setTexture(new CubicVR.Texture('content/terrain/grid.jpg'));
+
+  this.scene_object = new CubicVR.SceneObject(this.mesh);
+  this.scene_object.position = [0,0,0];
+
+} //Level::Constructor
 
 /**
  * load_level
  * Prepares a level for use
- *
- * @level_num: id of level to load
  **/
-function load_level(level_num) {
+function load_level() {
   var level = levels[level_num];
-  uv_mapper = new CubicVR.uvmapper();
-  uv_mapper.projection_mode = UV_PROJECTION_CUBIC;
-  uv_mapper.projection_axis = UV_AXIS_Y;
+  uv_mapper = new CubicVR.UVMapper();
+  uv_mapper.projection_mode = CubicVR.enums.uv.projection.CUBIC;
+  uv_mapper.projection_axis = CubicVR.enums.uv.axis.Y;
   uv_mapper.wrap_w_count = 5.0;
   uv_mapper.scale = [1, 1, 1];
 
   var landscape;
   var landscape_size = 500;
-  var landscape_material = new CubicVR.material("landscape");
-  landscape_material.setTexture(new CubicVR.texture("content/terrain/grid.jpg"));
-  landscape = new CubicVR.landscape(landscape_size, 2, 2, landscape_material);
-  for (var i=0, l=landscape.obj.points.length; i<l ;++i) {
-  } //for
-  landscape.obj.calcNormals();
+  var landscape_material = new CubicVR.Material("landscape");
+  landscape_material.setTexture(new CubicVR.Texture("content/terrain/grid.jpg"));
   uv_mapper.apply(landscape.obj, landscape_material);
   landscape.obj.compile();
 
@@ -670,22 +704,23 @@ function stop_main_loop() {
  * Prepares a CubicVR for use. Initializes the viewport, camera and initial sceneObjects.
  **/
 function init_graphics() {
-  octree = new OcTree(4000, 8);
-  scene = new CubicVR.scene(main_canvas.width, main_canvas.height, 40, 0.1, 300, octree);
-  scene.setSkyBox(new CubicVR.skyBox("content/skybox/clouds.jpg"));
+  octree = new CubicVR.OcTree(4000, 8);
+  scene = new CubicVR.Scene(main_canvas.width, main_canvas.height, 40, 0.1, 300, octree);
+  scene.setSkyBox(new CubicVR.SkyBox("content/skybox/sky1.jpg"));
   scene.camera.position = [0, 0, 0];
   scene.camera.target = [0, 0, 1];
   scene.camera.setFOV(40);
   scene.camera.setDimensions(main_canvas.width, main_canvas.height);
 
   /** for testing **/
-  var light = new cubicvr_light(LIGHT_TYPE_POINT);
+  var light = new CubicVR.Light(CubicVR.enums.light.type.POINT);
   light.position = [0, 0, 0];
   light.distance = 200.0;
   light.intensity = 3.0;
   scene.bindLight(light);
   test_light = light;
 
+  CubicVR.globalAmbient = [.9,.9,.9];
 } //init_graphics
 
 /**
@@ -756,20 +791,16 @@ function main_loop() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   //trailing camera
-  camera_position_target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2] - 10];
-  scene.camera.position[0] -= (scene.camera.position[0] - camera_position_target[0]) * camera_follow_speed;
-  scene.camera.position[1] -= (scene.camera.position[1] - camera_position_target[1]) * camera_follow_speed;
-  scene.camera.position[2] -= (scene.camera.position[2] - camera_position_target[2]) * camera_follow_speed;
-  scene.camera.target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2]];
+  //camera_position_target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2] - 10];
+  //scene.camera.position[0] -= (scene.camera.position[0] - camera_position_target[0]) * camera_follow_speed;
+  //scene.camera.position[1] -= (scene.camera.position[1] - camera_position_target[1]) * camera_follow_speed;
+  //scene.camera.position[2] -= (scene.camera.position[2] - camera_position_target[2]) * camera_follow_speed;
+  //scene.camera.target = [test_player_game_object.position[0], test_player_game_object.position[1], test_player_game_object.position[2]];
+  scene.camera.position = [50*Math.sin(xp/2), 0, 50*Math.cos(xp/2)];
+  scene.camera.target = [0, 0, 0];
 
   scene.render();
 
-  if (current_level.landscape !== null) {
-    var landscape = current_level.landscape_graphics_component;
-    var camera = scene.camera;
-  	CubicVR.renderObject(landscape.obj, camera.mvMatrix, camera.pMatrix,cubicvr_identity, []);
-  } //if
-  
   /** end render **/
 
   /*** statistics ***/
@@ -782,8 +813,8 @@ function main_loop() {
   /** stats **/
   if (stats_div !== null) {
     var s = "FPS: " + Math.round(1000/elapsed_loop_time) + " ["+(limited?'Capped (too fast)':'Uncapped (too slow)')+"] | CANVAS: (" + main_canvas.width + ", " + main_canvas.height + ")";
-    if (game_socket.ready) s += "| Connected to Server: " + game_socket.current_player_id;
-    else s += "| Disconnected from Server";
+    //if (game_socket.ready) s += "| Connected to Server: " + game_socket.current_player_id;
+    //else s += "| Disconnected from Server";
     stats_div.innerHTML = s;
   } //if
   requestFrame();

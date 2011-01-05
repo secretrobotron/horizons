@@ -7,8 +7,27 @@ uniform vec3 mColor;
 uniform vec3 mAmb;
 
 varying vec3 vNormal;
+#if hasColorMap||hasBumpMap||hasNormalMap||hasAmbientMap||hasSpecularMap||hasAlphaMap
 varying vec2 vTextureCoord;
+#endif
 varying vec3 o_norm;
+
+#if alphaDepth
+
+uniform vec3 depthInfo;
+
+float ConvertDepth3(float d)
+{
+  return (depthInfo.x*depthInfo.y)/(depthInfo.y-d*(depthInfo.y-depthInfo.x));
+}
+
+// transform range in world-z to 0-1 for near-far
+float DepthRange( float d )
+{
+  return ( d - depthInfo.x ) / ( depthInfo.y - depthInfo.x );
+}
+
+#endif
 
 #if hasColorMap
 	uniform sampler2D colorMap;
@@ -35,9 +54,7 @@ varying vec3 o_norm;
 	uniform sampler2D normalMap;
 #endif
 
-#if hasAlpha
 	uniform float mAlpha;
-#endif
 
 #if hasAmbientMap
 	uniform sampler2D ambientMap;
@@ -61,11 +78,12 @@ uniform mat4 uOMatrix;
 	uniform vec3 lSpec;
 	uniform float lInt;
 	uniform float lDist;
-	uniform vec3 lAmb;
 
 	uniform vec3 mSpec;
 	uniform float mShine;
 #endif
+
+uniform vec3 lAmb;
 
 #if lightPoint||lightSpot
 	varying vec3 lightPos;
@@ -93,8 +111,10 @@ void main(void)
   float v = (height) * 0.05 - 0.04; // * scale and - bias 
   vec3 eye = normalize(eyeVec); 
   vec2 texCoord = vTextureCoord.xy + (eye.xy * v);
-#else
+#else 
+#if hasColorMap||hasBumpMap||hasNormalMap||hasAmbientMap||hasSpecularMap||hasAlphaMap
 	vec2 texCoord = vTextureCoord;
+#endif
 #endif
 
 
@@ -115,10 +135,26 @@ void main(void)
 
 
 #if hasColorMap
-	color = vec4(mColor*texture2D(colorMap, vec2(texCoord.s, texCoord.t)).rgb,1.0);
+#if !(lightPoint||lightDirectional||lightSpot||lightArea)
+	color = texture2D(colorMap, vec2(texCoord.s, texCoord.t)).rgba;
+	//vec4(lAmb,1.0)*
+#else
+  color = texture2D(colorMap, vec2(texCoord.s, texCoord.t)).rgba;
+#endif
+	if (color.a<=0.1) discard;  
 #else
 	color = vec4(mColor,1.0);
 #endif
+
+#if hasAlphaMap
+	color.a = texture2D(alphaMap, texCoord).r;
+  if (color.a==0.0) discard;
+#else
+#if hasAlpha
+	color.a = mAlpha;
+#endif
+#endif
+
 
 float envAmount = 0.6;
 
@@ -159,13 +195,13 @@ float envAmount = 0.6;
 	// compute the dot product between normal and normalized lightdir 
 	NdotL = max(dot(n,normalize(lightDir)),0.0);
 
-	vec3 lit = lAmb;
+	vec3 lit = vec3(0,0,0);
 
 	if (NdotL > 0.0) 
 	{
 		// basic diffuse
 		float distSqr = dot(lightDir, lightDir);
-		float att = clamp(((lDist-dist)/lDist)*lInt, 0.0, lInt);			
+    float att = clamp(((lDist-dist)/lDist), 0.0, 1.0)*lInt;
 //		color.rgb = att * (lDiff * NdotL);
 		
 		lit = att * NdotL * lDiff;
@@ -176,7 +212,7 @@ float envAmount = 0.6;
 		// color += att * specVal * lSpec * pow(NdotHV,1.0);
 	}
 	
-	color.rgb *= lit;
+	color.rgb *= lit+lAmb;
 #endif
 
 
@@ -223,22 +259,27 @@ float envAmount = 0.6;
 
 #endif
 
-#if hasAlpha
-#if hasAlphaMap
-	color.a = texture2D(alphaMap, texCoord).r;
-#else
-	color.a = mAlpha;
-#endif
-#else
-	color.a = 1.0;
-#endif
-
 #if hasAmbientMap
-	color.rgb += mAmb+texture2D(ambientMap, texCoord).rgb;							
+#if !(lightPoint||lightDirectional||lightSpot||lightArea)
+	color.rgb = color.rgb*texture2D(ambientMap, texCoord).rgb;							
 #else
+  color.rgb = color.rgb+texture2D(ambientMap, texCoord).rgb;							
+#endif
+#else
+#if !hasColorMap
 	color.rgb += mAmb;
+#else
+  color.rgb += mAmb*texture2D(colorMap, texCoord).rgb;
+#endif
 #endif
 
+#if alphaDepth
+#if !hasAlpha
+  float linear_depth = DepthRange( ConvertDepth3( gl_FragCoord.z ));
+
+  color.a = linear_depth;
+#endif
+#endif
 
 	gl_FragColor = color;
 
